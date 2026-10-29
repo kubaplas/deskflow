@@ -401,6 +401,35 @@ KeyButton OSXKeyState::mapKeyFromEvent(KeyIDs &ids, KeyModifierMask *maskOut, CG
   return 0;
 }
 
+KeyID OSXKeyState::mapAltGrKey(KeyID id)
+{
+  return (id == kKeyAltGr) ? kKeyAlt_R : id;
+}
+
+KeyModifierMask OSXKeyState::mapAltGrModifiers(KeyModifierMask mask)
+{
+  if ((mask & KeyModifierAltGr) == 0) {
+    return mask;
+  }
+  return (mask & ~KeyModifierAltGr) | KeyModifierAlt;
+}
+
+void OSXKeyState::fakeKeyDown(KeyID id, KeyModifierMask mask, KeyButton button, const std::string &lang)
+{
+  // macOS has no AltGr key, the Option key produces the characters that
+  // AltGr produces elsewhere.  a server that resolved a character on the
+  // AltGr layer sends that character with the AltGr modifier, which no
+  // entry in the macOS key map requires, so translate it to Alt.
+  KeyState::fakeKeyDown(mapAltGrKey(id), mapAltGrModifiers(mask), button, lang);
+}
+
+bool OSXKeyState::fakeKeyRepeat(
+    KeyID id, KeyModifierMask mask, int32_t count, KeyButton button, const std::string &lang
+)
+{
+  return KeyState::fakeKeyRepeat(mapAltGrKey(id), mapAltGrModifiers(mask), count, button, lang);
+}
+
 bool OSXKeyState::fakeCtrlAltDel()
 {
   // pass keys through unchanged

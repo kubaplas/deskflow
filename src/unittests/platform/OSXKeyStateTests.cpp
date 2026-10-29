@@ -15,6 +15,9 @@
 #define SHIFT_BUTTON 57
 #define A_CHAR_ID 0x00000061
 #define A_CHAR_BUTTON 001
+// latin small letter a with ogonek, typed with Option+a on Polish layouts
+#define A_OGONEK_ID 0x00000105
+#define ALT_R_BUTTON 62
 
 void OSXKeyStateTests::initTestCase()
 {
@@ -53,6 +56,77 @@ void OSXKeyStateTests::mapModifiersFromOSX_OSXMask()
   uint32_t numMask = 0 | kCGEventFlagMaskNumericPad;
   outMask = keyState.mapModifiersFromOSX(numMask);
   QCOMPARE(outMask, KeyModifierNumLock);
+}
+
+void OSXKeyStateTests::mapAltGr_keyAndModifiers()
+{
+  // macOS has no AltGr key, the right Option key takes its place
+  QCOMPARE(OSXKeyState::mapAltGrKey(kKeyAltGr), static_cast<KeyID>(kKeyAlt_R));
+  QCOMPARE(OSXKeyState::mapAltGrKey(kKeyAlt_L), static_cast<KeyID>(kKeyAlt_L));
+  QCOMPARE(OSXKeyState::mapAltGrKey(A_OGONEK_ID), static_cast<KeyID>(A_OGONEK_ID));
+
+  QCOMPARE(OSXKeyState::mapAltGrModifiers(KeyModifierAltGr), static_cast<KeyModifierMask>(KeyModifierAlt));
+  QCOMPARE(
+      OSXKeyState::mapAltGrModifiers(KeyModifierAltGr | KeyModifierShift),
+      static_cast<KeyModifierMask>(KeyModifierAlt | KeyModifierShift)
+  );
+  QCOMPARE(
+      OSXKeyState::mapAltGrModifiers(KeyModifierAltGr | KeyModifierAlt), static_cast<KeyModifierMask>(KeyModifierAlt)
+  );
+
+  // masks without AltGr are left alone
+  QCOMPARE(OSXKeyState::mapAltGrModifiers(0), static_cast<KeyModifierMask>(0));
+  QCOMPARE(OSXKeyState::mapAltGrModifiers(KeyModifierControl), static_cast<KeyModifierMask>(KeyModifierControl));
+  QCOMPARE(OSXKeyState::mapAltGrModifiers(KeyModifierAlt), static_cast<KeyModifierMask>(KeyModifierAlt));
+}
+
+void OSXKeyStateTests::mapAltGr_optionLayerCharacterIsMapped()
+{
+  // the macOS key map records characters on the Option layer as requiring
+  // Alt.  a server that resolved such a character on its own AltGr layer
+  // sends the character with the AltGr modifier, which matches nothing.
+  deskflow::KeyMap keyMap;
+
+  deskflow::KeyMap::KeyItem character;
+  character.m_id = A_OGONEK_ID;
+  character.m_button = A_CHAR_BUTTON;
+  character.m_required = KeyModifierAlt;
+  character.m_sensitive = KeyModifierShift | KeyModifierAlt;
+  keyMap.addKeyEntry(character);
+
+  deskflow::KeyMap::KeyItem option;
+  option.m_id = kKeyAlt_R;
+  option.m_button = ALT_R_BUTTON;
+  option.m_generates = KeyModifierAlt;
+  keyMap.addKeyEntry(option);
+  keyMap.finish();
+
+  deskflow::KeyMap::Keystrokes keys;
+  deskflow::KeyMap::ModifierToKeys activeModifiers;
+  KeyModifierMask currentState = 0;
+  QVERIFY(keyMap.mapKey(keys, A_OGONEK_ID, 0, activeModifiers, currentState, KeyModifierAltGr, false, "en") == nullptr);
+
+  // translating AltGr to Alt finds the Option layer entry
+  keys.clear();
+  activeModifiers.clear();
+  currentState = 0;
+  const auto *mapped = keyMap.mapKey(
+      keys, OSXKeyState::mapAltGrKey(A_OGONEK_ID), 0, activeModifiers, currentState,
+      OSXKeyState::mapAltGrModifiers(KeyModifierAltGr), false, "en"
+  );
+  QVERIFY(mapped != nullptr);
+  QCOMPARE(mapped->m_button, static_cast<KeyButton>(A_CHAR_BUTTON));
+
+  // the AltGr key itself is the right Option key
+  keys.clear();
+  activeModifiers.clear();
+  currentState = 0;
+  mapped = keyMap.mapKey(
+      keys, OSXKeyState::mapAltGrKey(kKeyAltGr), 0, activeModifiers, currentState,
+      OSXKeyState::mapAltGrModifiers(KeyModifierAltGr), false, "en"
+  );
+  QVERIFY(mapped != nullptr);
+  QCOMPARE(mapped->m_button, static_cast<KeyButton>(ALT_R_BUTTON));
 }
 
 void OSXKeyStateTests::fakePollShift()

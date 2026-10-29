@@ -75,9 +75,27 @@ public:
   bool
   mapDeskflowHotKeyToMac(KeyID key, KeyModifierMask mask, uint32_t &macVirtualKey, uint32_t &macModifierMask) const;
 
+  //! Map the AltGr key to its macOS equivalent
+  /*!
+  macOS has no AltGr key;  the right Option key produces the characters
+  that AltGr produces elsewhere.  Returns \p id unchanged unless it is
+  \c kKeyAltGr.
+  */
+  static KeyID mapAltGrKey(KeyID id);
+
+  //! Map the AltGr modifier to its macOS equivalent
+  /*!
+  Replaces \c KeyModifierAltGr with \c KeyModifierAlt in \p mask so key
+  map entries for the Option layer are matched.  Returns \p mask
+  unchanged if AltGr isn't set.
+  */
+  static KeyModifierMask mapAltGrModifiers(KeyModifierMask mask);
+
   //@}
 
   // IKeyState overrides
+  void fakeKeyDown(KeyID id, KeyModifierMask mask, KeyButton button, const std::string &lang) override;
+  bool fakeKeyRepeat(KeyID id, KeyModifierMask mask, int32_t count, KeyButton button, const std::string &lang) override;
   bool fakeCtrlAltDel() override;
   bool fakeMediaKey(KeyID id) override;
   KeyModifierMask pollActiveModifiers() const override;

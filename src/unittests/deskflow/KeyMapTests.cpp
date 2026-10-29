@@ -183,6 +183,79 @@ void KeyMapTests::mapkey()
   QVERIFY(result == nullptr);
 }
 
+void KeyMapTests::mapCommandKey_shiftedDuplicate_prefersUnshiftedButton()
+{
+  // some layouts carry the same character on two buttons, one of them only
+  // with shift held (Polish Pro has l-stroke on option+l and on
+  // option+shift+p).  a command key is synthesized with the desired mask,
+  // so the shifted button would be pressed without its shift and generate
+  // a different character.  the unshifted button must win.
+  static const KeyID lStroke = 0x0142;
+  const KeyButton shiftedButton = 36;
+  const KeyButton plainButton = 38;
+
+  KeyMap keyMap;
+
+  // added first, so it is the first entry in the list
+  KeyMap::KeyItem shifted;
+  shifted.m_id = lStroke;
+  shifted.m_button = shiftedButton;
+  shifted.m_required = KeyModifierShift | KeyModifierAlt;
+  shifted.m_sensitive = KeyModifierShift | KeyModifierAlt;
+  keyMap.addKeyEntry(shifted);
+
+  KeyMap::KeyItem plain;
+  plain.m_id = lStroke;
+  plain.m_button = plainButton;
+  plain.m_required = KeyModifierAlt;
+  plain.m_sensitive = KeyModifierShift | KeyModifierAlt;
+  keyMap.addKeyEntry(plain);
+
+  KeyMap::KeyItem alt;
+  alt.m_id = kKeyAlt_L;
+  alt.m_button = 59;
+  alt.m_generates = KeyModifierAlt;
+  keyMap.addKeyEntry(alt);
+  keyMap.finish();
+
+  KeyMap::Keystrokes keys;
+  KeyMap::ModifierToKeys activeModifiers;
+  KeyModifierMask currentState = 0;
+  const auto *mapped = keyMap.mapKey(keys, lStroke, 0, activeModifiers, currentState, KeyModifierAlt, false, "en");
+  QVERIFY(mapped != nullptr);
+  QCOMPARE(mapped->m_button, plainButton);
+}
+
+void KeyMapTests::mapCommandKey_shiftedKeyId_stillFindsShiftedButton()
+{
+  // a shifted KeyID with no shift in the desired mask (e.g. ctrl+'A' from a
+  // server that sends the upper case id) must still resolve to its button
+  static const KeyID upperA = 'A';
+  const KeyButton aButton = 1;
+
+  KeyMap keyMap;
+  KeyMap::KeyItem item;
+  item.m_id = upperA;
+  item.m_button = aButton;
+  item.m_required = KeyModifierShift;
+  item.m_sensitive = KeyModifierShift;
+  keyMap.addKeyEntry(item);
+
+  KeyMap::KeyItem ctrl;
+  ctrl.m_id = kKeyControl_L;
+  ctrl.m_button = 59;
+  ctrl.m_generates = KeyModifierControl;
+  keyMap.addKeyEntry(ctrl);
+  keyMap.finish();
+
+  KeyMap::Keystrokes keys;
+  KeyMap::ModifierToKeys activeModifiers;
+  KeyModifierMask currentState = 0;
+  const auto *mapped = keyMap.mapKey(keys, upperA, 0, activeModifiers, currentState, KeyModifierControl, false, "en");
+  QVERIFY(mapped != nullptr);
+  QCOMPARE(mapped->m_button, aButton);
+}
+
 void KeyMapTests::parseModifiers_plusKey_keepsPlusAsKey()
 {
   std::string keystroke = "Control+Shift++";

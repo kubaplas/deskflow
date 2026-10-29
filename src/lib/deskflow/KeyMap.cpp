@@ -486,33 +486,45 @@ const KeyMap::KeyItem *KeyMap::mapCommandKey(
   }
   const KeyGroupTable &keyGroupTable = i->second;
 
-  // find the first key that generates this KeyID
+  // find the first key that generates this KeyID.  we look twice:  the
+  // first pass skips a key that needs a shift the desired mask doesn't
+  // have.  synthesizing a command key uses the desired mask as-is, so
+  // such a key would be pressed without its shift and would generate a
+  // different character than the one asked for.  the second pass is the
+  // original match, which ignores shift entirely so a shifted KeyID
+  // (e.g. 'A' for ctrl+shift+a) still finds its button.
   const KeyItem *keyItem = nullptr;
   const auto numGroups = getNumGroups();
-  for (int32_t groupOffset = 0; groupOffset < numGroups; ++groupOffset) {
-    const auto effectiveGroup = getEffectiveGroup(group, groupOffset);
-    const KeyEntryList &entryList = keyGroupTable[effectiveGroup];
-    for (const auto &entry : entryList) {
-      if (entry.size() != 1) {
-        continue;
-      }
-      // match based on shift and make sure all required modifiers,
-      // except shift, are already in the desired mask;  we're
-      // after the right button not the right character.
-      // we'll use desiredMask as-is, overriding the key's required
-      // modifiers, when synthesizing this button.
-      const auto &item = entry.back();
-      KeyModifierMask desiredShiftMask = KeyModifierShift & desiredMask;
-      KeyModifierMask requiredIgnoreShiftMask = item.m_required & ~KeyModifierShift;
-      if ((item.m_required & desiredShiftMask) == (item.m_sensitive & desiredShiftMask) &&
-          ((requiredIgnoreShiftMask & desiredMask) == requiredIgnoreShiftMask)) {
+  for (int32_t pass = 0; pass < 2 && keyItem == nullptr; ++pass) {
+    for (int32_t groupOffset = 0; groupOffset < numGroups; ++groupOffset) {
+      const auto effectiveGroup = getEffectiveGroup(group, groupOffset);
+      const KeyEntryList &entryList = keyGroupTable[effectiveGroup];
+      for (const auto &entry : entryList) {
+        if (entry.size() != 1) {
+          continue;
+        }
+        // match based on shift and make sure all required modifiers,
+        // except shift, are already in the desired mask;  we're
+        // after the right button not the right character.
+        // we'll use desiredMask as-is, overriding the key's required
+        // modifiers, when synthesizing this button.
+        const auto &item = entry.back();
+        KeyModifierMask desiredShiftMask = KeyModifierShift & desiredMask;
+        KeyModifierMask requiredIgnoreShiftMask = item.m_required & ~KeyModifierShift;
+        if ((item.m_required & desiredShiftMask) != (item.m_sensitive & desiredShiftMask) ||
+            ((requiredIgnoreShiftMask & desiredMask) != requiredIgnoreShiftMask)) {
+          continue;
+        }
+        if (pass == 0 && (item.m_required & KeyModifierShift & ~desiredMask) != 0) {
+          continue;
+        }
         LOG_VERBOSE("found key in group %d", effectiveGroup);
         keyItem = &item;
         break;
       }
-    }
-    if (keyItem) {
-      break;
+      if (keyItem) {
+        break;
+      }
     }
   }
   if (!keyItem) {
